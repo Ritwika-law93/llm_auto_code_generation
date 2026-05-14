@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pip install python-pptx --quiet)",
+      "Bash(where python *)",
+      "Bash(/c/Python314/python.exe -m pip install python-pptx)",
+      "Bash(/c/Python314/python.exe make_ppt.py)",
+      "Bash(/c/Python314/python.exe -c \"import ast; [ast.parse\\(open\\(f\\).read\\(\\)\\) for f in ['prompts.py','generator.py','main.py','app.py','make_ppt.py']]; print\\('syntax OK'\\)\")",
+      "Bash(/c/Python314/python.exe -c \"import ast; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\)\\) for f in ['prompts.py','generator.py','main.py','app.py','make_ppt.py']]; print\\('syntax OK'\\)\")"
+    ]
+  }
+}

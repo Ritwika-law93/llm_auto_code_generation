@@ -1,4 +1,35 @@
-#### PRODUCT REQUIREMENT DOCUMENT PROMPT
+"""Prompt templates and stack definitions for the auto code generation pipeline."""
+
+# ---------------------------------------------------------------------------
+# Supported target stacks
+# ---------------------------------------------------------------------------
+STACKS = {
+    "Node.js + Express": {
+        "language": "JavaScript (Node.js)",
+        "framework": "Express",
+        "test_framework": "Jest + Supertest",
+        "code_label": "javascript",
+    },
+    "Java + Spring Boot": {
+        "language": "Java",
+        "framework": "Spring Boot",
+        "test_framework": "JUnit 5 + Mockito",
+        "code_label": "java",
+    },
+    "Python + FastAPI": {
+        "language": "Python",
+        "framework": "FastAPI",
+        "test_framework": "pytest + httpx",
+        "code_label": "python",
+    },
+}
+
+DEFAULT_STACK = "Node.js + Express"
+
+
+# ---------------------------------------------------------------------------
+# Default PRD (kept for backwards compatibility with main.py)
+# ---------------------------------------------------------------------------
 PRD = """
 Build a task management system with:
 - User authentication
@@ -8,15 +39,17 @@ Build a task management system with:
 """
 
 
-#### SYSTEM DESIGN PROMPT
-SYSTEM_DESIGN_PROMPT= """
-You are a principal software architect.P
+# ---------------------------------------------------------------------------
+# Prompt templates (stack-aware)
+# ---------------------------------------------------------------------------
+SYSTEM_DESIGN_PROMPT = """
+You are a principal software architect.
 
 Given the following PRD:
 {prd}
 
-Produce:
-1. System architecture (Node.js + Express)
+Produce a production-ready system design targeting **{language} + {framework}**:
+1. System architecture
 2. Folder structure
 3. Database schema
 4. API contracts (REST)
@@ -24,24 +57,21 @@ Produce:
 6. Edge cases
 7. Scalability considerations
 
-Be precise and production-ready.
+Be precise and production-ready. Use clear headings.
 """
 
 
-
-#### CODE GENERATION PROMPT
 CODE_GEN_PROMPT = """
 You are a senior backend engineer.
 
 Given this system design:
 {design}
 
-Generate production-grade Node.js (Express) code:
-- Routes
-- Controllers
+Generate production-grade **{language} ({framework})** code:
+- Routes / Controllers
 - Services
 - Models
-- Middleware
+- Middleware (auth, validation, error handling)
 
 Requirements:
 - Clean architecture
@@ -49,26 +79,52 @@ Requirements:
 - Input validation
 - Security best practices
 
-Output code in structured sections.
+Output each file as a fenced code block prefixed with the file path as a comment,
+for example:
+```{code_label}
+// path: src/routes/tasks.js
+...code...
+```
 """
 
 
-#### TEST CASE GENERATION PROMPT
 TEST_GEN_PROMPT = """
 You are a senior QA engineer.
 
 Given this backend code:
 {code}
 
-Generate:
-1. Jest + Supertest test cases
-2. Unit + integration tests
+Generate **{test_framework}** tests:
+1. Unit tests
+2. Integration tests
 3. Edge cases
 4. Failure scenarios
 
-Ensure high coverage.
+Ensure high coverage and output each test file as a fenced code block with a
+file path comment header.
 """
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def build_design_prompt(prd: str, stack: str = DEFAULT_STACK) -> str:
+    s = STACKS[stack]
+    return SYSTEM_DESIGN_PROMPT.format(
+        prd=prd, language=s["language"], framework=s["framework"]
+    )
 
 
+def build_code_prompt(design: str, stack: str = DEFAULT_STACK) -> str:
+    s = STACKS[stack]
+    return CODE_GEN_PROMPT.format(
+        design=design,
+        language=s["language"],
+        framework=s["framework"],
+        code_label=s["code_label"],
+    )
+
+
+def build_test_prompt(code: str, stack: str = DEFAULT_STACK) -> str:
+    s = STACKS[stack]
+    return TEST_GEN_PROMPT.format(code=code, test_framework=s["test_framework"])

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/Python314/python.exe -m pip install streamlit pypdf)",
+      "Bash(/c/Python314/python.exe -c \"import streamlit, pypdf; print\\('streamlit', streamlit.__version__\\); print\\('pypdf', pypdf.__version__\\)\")"
+    ]
+  }
+}

@@ -1,3 +1,3 @@
-MODEL = "anthropic/claude-3-haiku"
+MODEL = "gpt-4o-mini"
 TEMPERATURE = 0.3
 MAX_TOKENS = 2000

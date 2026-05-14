@@ -1,2 +1,5 @@
 openai
-dotenv
+python-dotenv
+streamlit
+pypdf
+python-pptx
