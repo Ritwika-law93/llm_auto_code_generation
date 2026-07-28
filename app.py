@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import zipfile
 from pathlib import Path
 
@@ -11,7 +12,16 @@ from config import MODEL, TEMPERATURE
 from generator import generate_all
 from prompts import STACKS, DEFAULT_STACK
 
-EXAMPLES_DIR = Path(__file__).parent / "samples"
+# Streamlit reruns this module on every interaction, so module-level logging
+# config must be idempotent — basicConfig is a no-op if handlers already exist.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+SAMPLES_DIR = Path(__file__).parent / "samples"
 
 
 # ---------------------------------------------------------------------------
@@ -52,29 +62,45 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def load_examples() -> dict[str, str]:
+def load_samples() -> dict[str, str]:
+    """Read all .md files from the samples directory and return {display_name: content}."""
     out: dict[str, str] = {}
-    if EXAMPLES_DIR.exists():
-        for path in sorted(EXAMPLES_DIR.glob("*.md")):
-            out[path.stem.replace("_", " ").title()] = path.read_text(encoding="utf-8")
+    if SAMPLES_DIR.exists():
+        for path in sorted(SAMPLES_DIR.glob("*.md")):
+            display_name = path.stem.replace("_", " ").title()
+            out[display_name] = path.read_text(encoding="utf-8")
+        logger.info("Loaded %d sample PRD(s) from %s", len(out), SAMPLES_DIR)
+    else:
+        logger.warning("Samples directory not found: %s", SAMPLES_DIR)
     return out
 
 
 def extract_text_from_upload(uploaded_file) -> str:
+    """Extract plain text from an uploaded .txt, .md, or .pdf file."""
     name = uploaded_file.name.lower()
+    logger.info("Extracting text from uploaded file: %s", uploaded_file.name)
+
     if name.endswith(".pdf"):
         try:
             from pypdf import PdfReader  # local import: optional dependency
         except ImportError:
             st.error("PDF support requires `pypdf`. Run: pip install pypdf")
+            logger.error("pypdf not installed — cannot parse PDF upload")
             return ""
         reader = PdfReader(uploaded_file)
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
-    # text / markdown
-    return uploaded_file.read().decode("utf-8", errors="ignore")
+        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        logger.info("Extracted %d chars from PDF (%d pages)", len(text), len(reader.pages))
+        return text
+
+    # Plain text or markdown — decode directly.
+    text = uploaded_file.read().decode("utf-8", errors="ignore")
+    logger.info("Extracted %d chars from text file", len(text))
+    return text
 
 
 def build_zip(artifacts: dict) -> bytes:
+    """Pack all pipeline artifacts into an in-memory ZIP and return raw bytes."""
+    logger.info("Building ZIP for stack=%r", artifacts.get("stack"))
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("01_prd.md", artifacts["prd"])
@@ -86,6 +112,8 @@ def build_zip(artifacts: dict) -> bytes:
             f"Generated for stack: {artifacts['stack']}\n"
             f"Pipeline: PRD -> System Design -> Code -> Tests\n",
         )
+    zip_size = buf.tell()
+    logger.info("ZIP built — size=%d bytes", zip_size)
     return buf.getvalue()
 
 
@@ -138,6 +166,7 @@ st.markdown(
     "##### From a one-paragraph PRD to a documented, tested codebase — in minutes."
 )
 
+# Metric tiles — one per pipeline stage/stat.
 c1, c2, c3, c4 = st.columns(4)
 for col, label, value in [
     (c1, "Pipeline stages", "4"),
@@ -159,10 +188,13 @@ st.markdown("---")
 # ---------------------------------------------------------------------------
 st.subheader("1. Provide a Product Requirements Document")
 
-examples = load_examples()
+samples = load_samples()
+
+# prd_text is declared before the tabs so all three input paths can assign to it.
+# Streamlit re-executes this script on every interaction, so the last active tab wins.
+prd_text = ""
 input_tab1, input_tab2, input_tab3 = st.tabs(["Paste text", "Upload file", "Examples"])
 
-prd_text = ""
 with input_tab1:
     prd_text = st.text_area(
         "Paste your PRD here",
@@ -179,14 +211,15 @@ with input_tab2:
         prd_text = extract_text_from_upload(uploaded)
         st.success(f"Loaded {uploaded.name} ({len(prd_text)} chars)")
         with st.expander("Preview"):
+            # Cap preview at 2000 chars to avoid flooding the UI.
             st.text(prd_text[:2000] + ("..." if len(prd_text) > 2000 else ""))
 
 with input_tab3:
-    if not examples:
-        st.info("No examples found in `examples/` folder.")
+    if not samples:
+        st.info("No samples found in `samples/` folder.")
     else:
-        choice = st.selectbox("Pick an example PRD", list(examples.keys()))
-        prd_text = examples[choice]
+        choice = st.selectbox("Pick an example PRD", list(samples.keys()))
+        prd_text = samples[choice]
         st.code(prd_text, language="markdown")
 
 
@@ -201,34 +234,47 @@ go = st.button("🚀 Generate Design, Code & Tests", type="primary", use_contain
 if go:
     if not prd_text.strip():
         st.error("Please provide a PRD first.")
+        logger.warning("Generate clicked with empty PRD")
         st.stop()
     if not api_key_input.strip():
         st.error("Please enter your API key in the sidebar.")
+        logger.warning("Generate clicked with no API key")
         st.stop()
+
+    logger.info("Generation triggered — stack=%r prd_chars=%d", stack, len(prd_text))
 
     progress = st.progress(0, text="Starting...")
     status = st.empty()
 
+    # Maps pipeline status messages to approximate progress percentages.
     step_weights = {
         "Generating system design...": 10,
-        "Generating code...": 40,
-        "Generating test cases...": 75,
-        "Done.": 100,
+        "Generating code...":          40,
+        "Generating test cases...":    75,
+        "Done.":                       100,
     }
 
     def on_step(msg: str) -> None:
         pct = step_weights.get(msg, 50)
+        logger.info("Pipeline step: %s (%d%%)", msg, pct)
         progress.progress(pct, text=msg)
         status.info(msg)
 
     try:
-        artifacts = generate_all(prd=prd_text, stack=stack, on_step=on_step, api_key=api_key_input.strip())
+        artifacts = generate_all(
+            prd=prd_text,
+            stack=stack,
+            on_step=on_step,
+            api_key=api_key_input.strip(),
+        )
         st.session_state["artifacts"] = artifacts
         progress.progress(100, text="Done.")
         status.success("Generation complete.")
+        logger.info("Generation complete — artifacts stored in session state")
     except Exception as e:
         progress.empty()
         status.error(f"Generation failed: {e}")
+        logger.exception("Pipeline raised an exception: %s", e)
         st.stop()
 
 

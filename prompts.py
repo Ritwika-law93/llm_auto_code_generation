@@ -3,6 +3,10 @@
 # ---------------------------------------------------------------------------
 # Supported target stacks
 # ---------------------------------------------------------------------------
+# Each entry drives all three prompt templates — language/framework set the
+# code style, test_framework targets the right test runner, and code_label
+# is the fenced-code-block identifier used in the code generation prompt
+# (e.g. ```javascript ... ```) so syntax highlighting works in the output.
 STACKS = {
     "Node.js + Express": {
         "language": "JavaScript (Node.js)",
@@ -42,6 +46,9 @@ Build a task management system with:
 # ---------------------------------------------------------------------------
 # Prompt templates (stack-aware)
 # ---------------------------------------------------------------------------
+# All three prompts use a domain-specific system role to anchor output style.
+# Enumerating required sections explicitly prevents the model from skipping
+# less obvious areas (edge cases, scalability) under token pressure.
 SYSTEM_DESIGN_PROMPT = """
 You are a principal software architect.
 
@@ -108,6 +115,8 @@ file path comment header.
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+# Each builder injects the previous stage's output so the model stays grounded:
+#   PRD -> design -> code -> tests (each call receives the prior output as context).
 def build_design_prompt(prd: str, stack: str = DEFAULT_STACK) -> str:
     s = STACKS[stack]
     return SYSTEM_DESIGN_PROMPT.format(
