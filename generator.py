@@ -21,13 +21,13 @@ from prompts import (
 load_dotenv()
 
 
-def _make_client() -> OpenAI:
-    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
+def _make_client(api_key: Optional[str] = None) -> OpenAI:
+    key = api_key or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not key:
         raise RuntimeError(
-            "No API key found. Set OPENROUTER_API_KEY or OPENAI_API_KEY in .env"
+            "No API key found. Enter your key in the sidebar or set OPENROUTER_API_KEY in .env"
         )
-    return OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+    return OpenAI(api_key=key, base_url="https://openrouter.ai/api/v1")
 
 
 def call_llm(
@@ -36,8 +36,9 @@ def call_llm(
     temperature: float = TEMPERATURE,
     system: str = "You are a senior backend architect and developer.",
     client: Optional[OpenAI] = None,
+    api_key: Optional[str] = None,
 ) -> str:
-    client = client or _make_client()
+    client = client or _make_client(api_key=api_key)
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -55,13 +56,14 @@ def generate_all(
     on_step: Optional[Callable[[str], None]] = None,
     model: str = MODEL,
     temperature: float = TEMPERATURE,
+    api_key: Optional[str] = None,
 ) -> dict:
     """Run the full pipeline and return a dict of artifacts.
 
     `on_step` is an optional callback that receives status strings — useful for
     Streamlit progress updates.
     """
-    client = _make_client()
+    client = _make_client(api_key=api_key)
 
     def notify(msg: str) -> None:
         if on_step:

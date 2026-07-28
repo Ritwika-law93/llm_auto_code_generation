@@ -11,7 +11,7 @@ from config import MODEL, TEMPERATURE
 from generator import generate_all
 from prompts import STACKS, DEFAULT_STACK
 
-EXAMPLES_DIR = Path(__file__).parent / "examples"
+EXAMPLES_DIR = Path(__file__).parent / "samples"
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +93,19 @@ def build_zip(artifacts: dict) -> bytes:
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
+    st.markdown("### API Key")
+    api_key_input = st.text_input(
+        "OpenRouter / OpenAI API key",
+        type="password",
+        placeholder="sk-or-v1-... or sk-...",
+        help="Your key is used only for this session and never stored.",
+    )
+    if api_key_input:
+        st.success("Key provided", icon="🔑")
+    else:
+        st.warning("Enter an API key to generate.", icon="⚠️")
+
+    st.markdown("---")
     st.markdown("### Configuration")
     stack = st.selectbox("Target stack", list(STACKS.keys()), index=list(STACKS.keys()).index(DEFAULT_STACK))
     stack_info = STACKS[stack]
@@ -189,6 +202,9 @@ if go:
     if not prd_text.strip():
         st.error("Please provide a PRD first.")
         st.stop()
+    if not api_key_input.strip():
+        st.error("Please enter your API key in the sidebar.")
+        st.stop()
 
     progress = st.progress(0, text="Starting...")
     status = st.empty()
@@ -206,7 +222,7 @@ if go:
         status.info(msg)
 
     try:
-        artifacts = generate_all(prd=prd_text, stack=stack, on_step=on_step)
+        artifacts = generate_all(prd=prd_text, stack=stack, on_step=on_step, api_key=api_key_input.strip())
         st.session_state["artifacts"] = artifacts
         progress.progress(100, text="Done.")
         status.success("Generation complete.")
